@@ -6,17 +6,13 @@ from collections import Counter
 
 app = Flask(__name__)
 
-# Function to detect the most prominent colors
 def detect_named_colors(image):
     image_np = np.array(image)
     
-    # Apply Gaussian blur to reduce noise
     image_np = cv2.GaussianBlur(image_np, (5, 5), 0)
     
-    # Convert the image to HSV color space
     hsv_img = cv2.cvtColor(image_np, cv2.COLOR_RGB2HSV)
     
-    # Define a broad range of colors in HSV
     color_ranges = {
         "red": [(0, 70, 50), (10, 255, 255)],
         "dark red": [(160, 70, 50), (180, 255, 255)],
@@ -36,33 +32,26 @@ def detect_named_colors(image):
     
     detected_colors = Counter()
 
-    # Loop through color ranges and calculate the percentage of pixels matching each color
     for color_name, (lower, upper) in color_ranges.items():
         mask = cv2.inRange(hsv_img, np.array(lower), np.array(upper))
         color_ratio = (np.sum(mask) / 255) / (mask.shape[0] * mask.shape[1])
         
-        # Only consider colors that occupy more than 1% of the image
         if color_ratio > 0.01:
-            detected_colors[color_name] = color_ratio * 100  # Store percentage
+            detected_colors[color_name] = color_ratio * 100  
 
-    # Sort detected colors by percentage (dominance)
     sorted_colors = detected_colors.most_common()
 
     return sorted_colors
 
-# Flask route to accept image upload and detect colors
 @app.route('/upload', methods=['POST'])
 def upload_image():
     if 'image' not in request.files:
         return jsonify({'error': 'No image uploaded'}), 400
 
     file = request.files['image']
-    img = Image.open(file.stream)  # Open the image using PIL
-
-    # Detect named colors
+    img = Image.open(file.stream)  
     detected_colors = detect_named_colors(img)
 
-    # Return the detected colors with their percentages
     return jsonify({'colors': detected_colors})
 
 if __name__ == '__main__':
