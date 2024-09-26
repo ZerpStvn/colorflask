@@ -9,13 +9,15 @@ app = Flask(__name__)
 def detect_named_colors(image):
     image_np = np.array(image)
     
-    image_np = cv2.GaussianBlur(image_np, (5, 5), 0)
+    # Apply a light Gaussian blur to reduce noise but retain color info
+    image_np = cv2.GaussianBlur(image_np, (3, 3), 0)
     
+    # Convert to HSV color space for easier color detection
     hsv_img = cv2.cvtColor(image_np, cv2.COLOR_RGB2HSV)
     
+    # Define more precise color ranges in HSV
     color_ranges = {
-        "red": [(0, 70, 50), (10, 255, 255)],
-        "dark red": [(160, 70, 50), (180, 255, 255)],
+        "red": [((0, 70, 50), (10, 255, 255)), ((160, 70, 50), (180, 255, 255))],  # Two ranges for red (0-10 and 160-180)
         "green": [(36, 50, 50), (89, 255, 255)],
         "blue": [(90, 50, 50), (128, 255, 255)],
         "yellow": [(15, 50, 50), (35, 255, 255)],
@@ -28,18 +30,28 @@ def detect_named_colors(image):
         "gray": [(0, 0, 50), (180, 50, 200)],
         "black": [(0, 0, 0), (180, 255, 50)],
         "white": [(0, 0, 200), (180, 25, 255)] 
-        # 
     }
     
     detected_colors = Counter()
+    
+    # Calculate the total number of pixels to ignore black pixels in the percentage calculation
+    total_pixels = hsv_img.shape[0] * hsv_img.shape[1]
+    non_black_pixels = total_pixels - np.sum(cv2.inRange(hsv_img, np.array([0, 0, 0]), np.array([180, 255, 50]))) // 255
 
-    for color_name, (lower, upper) in color_ranges.items():
-        mask = cv2.inRange(hsv_img, np.array(lower), np.array(upper))
-        color_ratio = (np.sum(mask) / 255) / (mask.shape[0] * mask.shape[1])
+    for color_name, ranges in color_ranges.items():
+        if isinstance(ranges[0], tuple):
+            ranges = [ranges]
         
-        if color_ratio > 0.01:
-            detected_colors[color_name] = color_ratio * 100  
+        color_ratio_sum = 0
+        for lower, upper in ranges:
+            mask = cv2.inRange(hsv_img, np.array(lower), np.array(upper))
+            color_ratio_sum += (np.sum(mask) / 255) / total_pixels
+        
+        # If the detected color occupies more than 1% of non-black pixels, consider it significant
+        if color_ratio_sum > 0.01:
+            detected_colors[color_name] = (color_ratio_sum / non_black_pixels) * 100
 
+    # Sort colors by percentage
     sorted_colors = detected_colors.most_common()
 
     return sorted_colors
